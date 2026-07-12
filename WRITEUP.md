@@ -2,8 +2,8 @@
 
 ## 1. What was built
 
-A fully self-contained Lean 4 verification environment in
-`C:\Users\HP\LeanProofVerification` — nothing installed outside this folder:
+A fully self-contained Lean 4 verification environment in this repository's
+root folder — nothing installed outside it:
 
 - **Toolchain**: elan 4.2.3 in `.elan/`, Lean 4.31.0
 - **Library**: Mathlib (release v4.31.0) with its prebuilt binary cache
