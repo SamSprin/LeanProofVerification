@@ -1,0 +1,12 @@
+# Lean / Lake build artifacts and toolchain — never commit (multiple GB)
+/.lake/
+/.elan/
+
+# Elan installer leftovers
+/elan.zip
+/elan-tmp/
+
+# Editor / OS cruft
+*.olean
+*.ilean
+.DS_Store
