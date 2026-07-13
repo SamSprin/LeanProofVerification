@@ -21,6 +21,14 @@ set of structural hypotheses.
   the paper's case analysis each force the log-concavity inequality
   (`GoodTriple.log_concave`).
 
+* **Structural layer** — machine-checked abstract forms of the local
+  algebra behind the imported hypotheses: paper (2)
+  (`proper_subfamily_linearIndependent`), the rank estimate (3)
+  (`rank_estimate`, `rank_estimate_graded`), the UFD lemma
+  `(Kv) ∩ R² = Rv` (`primitive_line_saturated`), the passage to `vJ` with
+  the truncated-kernel identity (7) (`line_factorization`), and the
+  cyclic-submodule/simple-socle lemma (`cyclic_submodule_simple_socle`).
+
 * **Layer 2** — `deep_dispatch`: starting from the *primitive numerical
   shadows* of the commutative algebra — rank additivity of the minimal
   resolution (paper (1)), the rank estimate (3), and equation (8) with
@@ -52,9 +60,15 @@ h-vectors, so the following *structural* facts enter as named hypotheses of
 * `hr0`  — if `r_d = 0` then `P_{<d} = 0` (minimal relations are nonzero,
   p. 3, third case);
 * `hr1`  — in the putative-failure case `r_d = 1, p_d = 0, Δ²g_d = 1`, the
-  existence of `a < d` and the Gorenstein Hilbert function `B` with
-  equation (8) and Stanley's monotonicity (Lemma 1) — this packages the
-  UFD/cyclic-Gorenstein-submodule argument, (7)–(8), pp. 3–4.
+  existence of `a < d` and of `B` — either zero (the paper's `H = 0` case)
+  or a Gorenstein Hilbert function `Gor B (e−a)` — with equation (8): the
+  UFD/cyclic-Gorenstein-submodule argument, (7)–(8), pp. 3–4 (its abstract
+  algebraic content is machine-checked in the structural layer below);
+* `hGor` — a Gorenstein Hilbert function vanishes in negative degrees, is
+  nonnegative, and is bounded by the Hilbert function of `R`;
+* `hStanley` — **Stanley's theorem (Lemma 1)**, the sole major imported
+  structural theorem: a codimension-≤3 Gorenstein Hilbert function of
+  socle degree `E` is nondecreasing through degree `⌊E/2⌋`.
 
 Everything else — every inequality, identity, sum manipulation and case
 split in the paper — is proved below with **no `sorry` and no extra axioms**
@@ -250,6 +264,304 @@ theorem GoodTriple.log_concave {d a b c : ℤ} (hd : 2 ≤ d)
   · exact le_of_lt (r_eq_zero_log_concave hd hp)
   · exact le_of_lt (r_eq_one_log_concave hd hceq hx ha2)
 
+/-! ## Structural layer: the local algebra behind the imported hypotheses
+
+The hypotheses `h3` and `hr1` of `theorem1_full` are the numerical shadows
+of genuine linear-algebra and commutative-algebra facts — paper (2), (3),
+(7), and the cyclic-Gorenstein-submodule step of p. 3.  This section
+machine-checks those facts themselves, in the abstract, theorem-specific
+form in which the paper uses them.  They are proved with full generality
+over an arbitrary field / GCD domain / Artinian module, so instantiating
+them at `K = Frac(R)`, `R = k[x₁,x₂,x₃]`, `M` the dualized module is pure
+bookkeeping. -/
+
+section StructuralLemmas
+
+open Module
+
+/-- **Paper (2), abstract form.**  If the space of linear dependencies of a
+finite family of vectors is the line spanned by a single dependency `c` of
+*full support* (`c i ≠ 0` for every `i`), then every proper subfamily is
+linearly independent.
+
+In the paper: tensoring the minimal exact complex (1) with `K = Frac(R)`
+shows the kernel of `δ₂` is one-dimensional, spanned by the coordinate
+vector of the minimal generators of `I` — all nonzero; hence every proper
+subset of the columns of `δ₂` is `K`-linearly independent. -/
+theorem proper_subfamily_linearIndependent
+    {K : Type*} [Field K] {ι : Type*} [Fintype ι]
+    {V : Type*} [AddCommGroup V] [Module K V]
+    (f : ι → V) (c : ι → K)
+    (hker : ∀ g : ι → K, ∑ i, g i • f i = 0 → ∃ a : K, g = a • c)
+    (hfull : ∀ i, c i ≠ 0)
+    (s : Finset ι) (hs : s ≠ Finset.univ) :
+    LinearIndependent K (fun i : s => f i) := by
+  classical
+  obtain ⟨i₀, hi₀⟩ : ∃ i, i ∉ s := by
+    by_contra hcon
+    push Not at hcon
+    exact hs (Finset.eq_univ_iff_forall.mpr hcon)
+  rw [Fintype.linearIndependent_iff]
+  intro g hg j
+  -- extend the dependency by zero to the whole index set
+  set G : ι → K := fun i => if h : i ∈ s then g ⟨i, h⟩ else 0 with hG
+  have hzero : ∀ x ∈ Finset.univ, x ∉ s → G x • f x = 0 := by
+    intro x _ hx
+    rw [hG]
+    simp [dif_neg hx]
+  have hGsum : ∑ i, G i • f i = 0 := by
+    calc (∑ i, G i • f i)
+        = ∑ i ∈ s, G i • f i :=
+          (Finset.sum_subset (Finset.subset_univ s) hzero).symm
+      _ = ∑ i : s, G ↑i • f ↑i := (Finset.sum_coe_sort s fun i => G i • f i).symm
+      _ = ∑ i : s, g i • f ↑i := by
+          refine Finset.sum_congr rfl fun i _ => ?_
+          rw [hG]
+          simp
+      _ = 0 := hg
+  -- the extension is a multiple of the full-support vector, hence zero
+  obtain ⟨a, ha⟩ := hker G hGsum
+  have ha0 : a = 0 := by
+    have h0 : G i₀ = 0 := by rw [hG]; simp [dif_neg hi₀]
+    have h1 : a * c i₀ = 0 := by
+      have := congrFun ha i₀
+      rw [h0] at this
+      simpa using this.symm
+    rcases mul_eq_zero.mp h1 with h | h
+    · exact h
+    · exact absurd h (hfull i₀)
+  have hGj : G ↑j = 0 := by
+    have := congrFun ha ↑j
+    rw [ha0] at this
+    simpa using this
+  rw [hG] at hGj
+  simpa [dif_pos j.2] using hGj
+
+/-- **Rank–nullity bookkeeping for (3).**  If `ψ ∘ φ = 0` and the kernel of
+`φ` has dimension at most `ε`, then rank-nullity gives
+`rank φ ≥ dim V − ε`, while `range φ ⊆ ker ψ` gives
+`rank φ ≤ dim W − rank ψ`; together (in subtraction-free form)
+`dim V + rank ψ ≤ dim W + ε`. -/
+theorem rank_estimate
+    {K V W U : Type*} [Field K]
+    [AddCommGroup V] [Module K V] [FiniteDimensional K V]
+    [AddCommGroup W] [Module K W] [FiniteDimensional K W]
+    [AddCommGroup U] [Module K U]
+    (φ : V →ₗ[K] W) (ψ : W →ₗ[K] U) (hcomp : ψ ∘ₗ φ = 0)
+    {ε : ℕ} (hker : finrank K (LinearMap.ker φ) ≤ ε) :
+    finrank K V + finrank K (LinearMap.range ψ) ≤ finrank K W + ε := by
+  have h1 := LinearMap.finrank_range_add_finrank_ker φ
+  have h2 := LinearMap.finrank_range_add_finrank_ker ψ
+  have h3 : finrank K (LinearMap.range φ) ≤ finrank K (LinearMap.ker ψ) :=
+    Submodule.finrank_mono (LinearMap.range_le_ker_iff.mpr hcomp)
+  omega
+
+/-- **Paper (3): `Q_d − ε_d ≤ P_{<d} − r_d`, in additive form.**  The graded
+zero pattern of minimality: the columns of `δ₂` of shift ≤ `d` (source
+`V`, `dim V = Q_d`) can only involve rows of `F₁` of shift `< d`, i.e. the
+restricted `δ₂` lands in the subspace `W'` spanned by those rows
+(`dim W' = P_{<d}`).  Composing with `δ₁` gives zero, the kernel of the
+restricted `δ₂` is at most `ε_d`-dimensional by (2), and `r_d` is by
+definition the rank of `δ₁` restricted to `W'` — the image `W'.map ψ`.
+Conclusion: `Q_d + r_d ≤ P_{<d} + ε_d`. -/
+theorem rank_estimate_graded
+    {K V W U : Type*} [Field K]
+    [AddCommGroup V] [Module K V] [FiniteDimensional K V]
+    [AddCommGroup W] [Module K W] [FiniteDimensional K W]
+    [AddCommGroup U] [Module K U]
+    (φ : V →ₗ[K] W) (W' : Submodule K W) (hzero : ∀ v, φ v ∈ W')
+    (ψ : W →ₗ[K] U) (hcomp : ψ ∘ₗ φ = 0)
+    {ε : ℕ} (hker : finrank K (LinearMap.ker φ) ≤ ε) :
+    finrank K V + finrank K (W'.map ψ) ≤ finrank K W' + ε := by
+  have hcomp' : (ψ ∘ₗ W'.subtype) ∘ₗ LinearMap.codRestrict W' φ hzero = 0 := by
+    rw [LinearMap.comp_assoc, LinearMap.subtype_comp_codRestrict]
+    exact hcomp
+  have hker' :
+      finrank K (LinearMap.ker (LinearMap.codRestrict W' φ hzero)) ≤ ε := by
+    rwa [LinearMap.ker_codRestrict]
+  have key := rank_estimate (LinearMap.codRestrict W' φ hzero)
+    (ψ ∘ₗ W'.subtype) hcomp' hker'
+  have hrange : LinearMap.range (ψ ∘ₗ W'.subtype) = W'.map ψ := by
+    rw [LinearMap.range_comp, Submodule.range_subtype]
+  rwa [hrange] at key
+
+/-- **The UFD lemma (p. 3): `(Kv) ∩ R² = Rv` for a primitive vector.**
+Over a GCD domain (in the paper, the UFD `R = k[x₁,x₂,x₃]`): if
+`v = (v₁, v₂)` is primitive (its entries have no common non-unit factor)
+and `b·w = a·v` with `b ≠ 0` — that is, `w = (a/b)·v` inside `Frac(R)²` —
+then `w` is already an `R`-multiple of `v`.  This is the "divide a column
+by the gcd of its entries / Euclid's lemma" step that produces the ideal
+`J` with image `vJ`. -/
+theorem primitive_line_saturated
+    {R : Type*} [CommRing R] [IsDomain R] [GCDMonoid R]
+    {v w : Fin 2 → R} (hprim : IsRelPrime (v 0) (v 1))
+    {a b : R} (hb : b ≠ 0) (h : ∀ i, b * w i = a * v i) :
+    ∃ r : R, ∀ i, w i = r * v i := by
+  obtain ⟨a', b', ea, eb, hunit⟩ := extract_gcd a b
+  have hg : gcd a b ≠ 0 := fun h0 => hb (by rw [eb, h0, zero_mul])
+  -- reduce the fraction: b'·w = a'·v with a', b' coprime
+  have hred : ∀ i, b' * w i = a' * v i := by
+    intro i
+    apply mul_left_cancel₀ hg
+    calc gcd a b * (b' * w i) = b * w i := by rw [← mul_assoc, ← eb]
+      _ = a * v i := h i
+      _ = gcd a b * (a' * v i) := by conv_lhs => rw [ea, mul_assoc]
+  have hrel : IsRelPrime b' a' := (gcd_isUnit_iff_isRelPrime.mp hunit).symm
+  -- Euclid: b' divides both entries of the primitive v, so b' is a unit
+  have hdvd : ∀ i, b' ∣ v i := fun i =>
+    hrel.dvd_of_dvd_mul_left ⟨w i, (hred i).symm⟩
+  obtain ⟨u, hu⟩ := hprim (hdvd 0) (hdvd 1)
+  refine ⟨↑u⁻¹ * a', fun i => ?_⟩
+  have hi := hred i
+  rw [← hu] at hi
+  calc w i = ↑u⁻¹ * (↑u * w i) := by rw [← mul_assoc, Units.inv_mul, one_mul]
+    _ = ↑u⁻¹ * (a' * v i) := by rw [hi]
+    _ = ↑u⁻¹ * a' * v i := (mul_assoc _ _ _).symm
+
+/-- The same statement phrased literally over the fraction field: an
+element of `R²` lying on the `K`-line through a primitive vector is an
+`R`-multiple of it (`(Kv) ∩ R² = Rv`). -/
+theorem primitive_line_saturated_fraction
+    {R : Type*} [CommRing R] [IsDomain R] [GCDMonoid R]
+    {v w : Fin 2 → R} (hprim : IsRelPrime (v 0) (v 1))
+    (k : FractionRing R)
+    (h : ∀ i, algebraMap R (FractionRing R) (w i)
+          = k * algebraMap R (FractionRing R) (v i)) :
+    ∃ r : R, ∀ i, w i = r * v i := by
+  obtain ⟨a, b, hbmem, hk⟩ := IsFractionRing.div_surjective (A := R) k
+  have hb : b ≠ 0 := nonZeroDivisors.ne_zero hbmem
+  have hbK : algebraMap R (FractionRing R) b ≠ 0 := fun h0 =>
+    hb (IsFractionRing.injective R (FractionRing R) (by rw [h0, map_zero]))
+  refine primitive_line_saturated hprim (a := a) (b := b) hb fun i => ?_
+  apply IsFractionRing.injective R (FractionRing R)
+  rw [map_mul, map_mul, h i, ← hk]
+  field_simp
+
+/-- **The passage from the low-shift image to `vJ`, and the truncated-kernel
+identity (paper (7)).**  A linear map `φ` into `Rⁿ` whose image lies on the
+line through a nonzero vector `v` (over a domain) factors as
+`φ = (· • v) ∘ ψ` for a scalar-valued linear map `ψ`.  The ideal
+`J := range ψ` then realizes the image as `vJ`
+(`range φ = J.map (· • v)`), membership works degreewise
+(`c • v ∈ im φ ↔ c ∈ J` — the paper's `cv ∈ (vJ) ⟺ c ∈ J`, whose proof
+"uses the injectivity of multiplication by the nonzero vector `v`"),
+and `ker ψ = ker φ`. -/
+theorem line_factorization
+    {R M : Type*} [CommRing R] [IsDomain R] [AddCommGroup M] [Module R M]
+    {n : ℕ} {v : Fin n → R} (hv : v ≠ 0)
+    (φ : M →ₗ[R] (Fin n → R)) (hline : ∀ m, ∃ r : R, φ m = r • v) :
+    ∃ ψ : M →ₗ[R] R,
+      (∀ m, φ m = ψ m • v) ∧
+      LinearMap.range φ
+        = (LinearMap.range ψ).map (LinearMap.toSpanSingleton R (Fin n → R) v) ∧
+      (∀ r : R, r • v ∈ LinearMap.range φ ↔ r ∈ LinearMap.range ψ) ∧
+      LinearMap.ker ψ = LinearMap.ker φ := by
+  obtain ⟨i₀, hi₀⟩ : ∃ i, v i ≠ 0 := by
+    by_contra hcon
+    push Not at hcon
+    exact hv (funext hcon)
+  -- multiplication by v is injective, so the coefficient is unique
+  have huniq : ∀ {r s : R}, r • v = s • v → r = s := by
+    intro r s hrs
+    have h := congrFun hrs i₀
+    simp only [Pi.smul_apply, smul_eq_mul] at h
+    exact mul_right_cancel₀ hi₀ h
+  choose c hc using hline
+  have hadd : ∀ m₁ m₂, c (m₁ + m₂) = c m₁ + c m₂ := fun m₁ m₂ =>
+    huniq (by rw [← hc, map_add, hc, hc, add_smul])
+  have hsmul : ∀ (r : R) (m : M), c (r • m) = r * c m := fun r m =>
+    huniq (by rw [← hc, map_smul, hc, ← mul_smul])
+  let ψ : M →ₗ[R] R := ⟨⟨c, hadd⟩, fun r m => by simpa using hsmul r m⟩
+  have hφψ : ∀ m, φ m = ψ m • v := hc
+  refine ⟨ψ, hφψ, ?_, ?_, ?_⟩
+  · -- range φ = vJ
+    apply le_antisymm
+    · rintro _ ⟨m, rfl⟩
+      refine ⟨ψ m, ⟨m, rfl⟩, ?_⟩
+      rw [LinearMap.toSpanSingleton_apply]
+      exact (hφψ m).symm
+    · rintro _ ⟨_, ⟨m, rfl⟩, rfl⟩
+      refine ⟨m, ?_⟩
+      rw [LinearMap.toSpanSingleton_apply]
+      exact hφψ m
+  · -- c • v ∈ im φ ↔ c ∈ J
+    intro r
+    constructor
+    · rintro ⟨m, hm⟩
+      exact ⟨m, huniq (by rw [← hφψ m, hm])⟩
+    · rintro ⟨m, rfl⟩
+      exact ⟨m, hφψ m⟩
+  · -- the truncated-kernel identity ker ψ = ker φ
+    ext m
+    simp only [LinearMap.mem_ker]
+    constructor
+    · intro h0
+      rw [hφψ m, h0, zero_smul]
+    · intro h0
+      exact huniq (by rw [← hφψ m, h0, zero_smul])
+
+/-- The socle of a submodule `N` of `M`, relative to the ambient lattice:
+the join of the simple submodules of `M` contained in `N` (simple = atom
+in the submodule lattice). -/
+def socleOf {R M : Type*} [Ring R] [AddCommGroup M] [Module R M]
+    (N : Submodule R M) : Submodule R M :=
+  sSup {S | S ≤ N ∧ IsAtom S}
+
+section Socle
+
+variable {R M : Type*} [Ring R] [AddCommGroup M] [Module R M]
+
+lemma socleOf_le (N : Submodule R M) : socleOf N ≤ N :=
+  sSup_le fun _ hS => hS.1
+
+lemma socleOf_mono {N N' : Submodule R M} (h : N ≤ N') :
+    socleOf N ≤ socleOf N' :=
+  sSup_le_sSup fun _ hS => ⟨hS.1.trans h, hS.2⟩
+
+/-- Every nonzero submodule of an Artinian (e.g. finite-length) module
+contains a simple submodule, so its socle is nonzero. -/
+lemma socleOf_ne_bot [IsArtinian R M] {N : Submodule R M} (hN : N ≠ ⊥) :
+    socleOf N ≠ ⊥ := by
+  haveI : IsAtomic (Submodule R M) :=
+    isAtomic_of_orderBot_wellFounded_lt IsWellFounded.wf
+  obtain h | ⟨S, hS, hSN⟩ := IsAtomic.eq_bot_or_exists_atom_le N
+  · exact absurd h hN
+  · intro hbot
+    exact hS.1 (le_bot_iff.mp (hbot ▸ le_sSup ⟨hSN, hS⟩))
+
+/-- In a finite-length module with simple socle, every nonzero submodule
+has the *same* — hence simple — socle. -/
+theorem socleOf_eq_top_socle [IsArtinian R M]
+    (hsoc : IsAtom (socleOf (⊤ : Submodule R M)))
+    {N : Submodule R M} (hN : N ≠ ⊥) : socleOf N = socleOf ⊤ :=
+  (hsoc.le_iff.mp (socleOf_mono le_top)).resolve_left (socleOf_ne_bot hN)
+
+/-- **The elementary module lemma of p. 3.**  A nonzero cyclic submodule
+`R·x` of a finite-length module with simple socle again has simple socle,
+and the corresponding cyclic quotient `R ⧸ Ann(x)` — the paper's
+`B = R/Ann(H)`, presented as `R` modulo the kernel of `r ↦ r • x` — is an
+Artinian module isomorphic to it. -/
+theorem cyclic_submodule_simple_socle [IsArtinian R M]
+    (hsoc : IsAtom (socleOf (⊤ : Submodule R M))) {x : M} (hx : x ≠ 0) :
+    IsSimpleModule R (socleOf (Submodule.span R {x}))
+      ∧ IsArtinian R (R ⧸ LinearMap.ker (LinearMap.toSpanSingleton R M x))
+      ∧ Nonempty ((R ⧸ LinearMap.ker (LinearMap.toSpanSingleton R M x))
+          ≃ₗ[R] Submodule.span R {x}) := by
+  have hN : Submodule.span R {x} ≠ ⊥ := by
+    simpa [Submodule.span_singleton_eq_bot] using hx
+  have equiv : (R ⧸ LinearMap.ker (LinearMap.toSpanSingleton R M x))
+      ≃ₗ[R] Submodule.span R {x} :=
+    (LinearMap.quotKerEquivRange _).trans
+      (LinearEquiv.ofEq _ _ (LinearMap.range_toSpanSingleton x))
+  refine ⟨?_, ?_, ⟨equiv⟩⟩
+  · rw [isSimpleModule_iff_isAtom, socleOf_eq_top_socle hsoc hN]
+    exact hsoc
+  · exact isArtinian_of_linearEquiv equiv.symm
+
+end Socle
+
+end StructuralLemmas
+
 /-! ## Layer 2: from the resolution numerics to the scenarios
 
 The finite sums `Σ_b f(b) · Nz(t − b)` over shifts `b ∈ [0, u]` are the
@@ -316,9 +628,19 @@ numerical hypotheses — rank additivity `hres` of the exact complex (1), the
 rank estimate `h3` (= (3)), and the structural facts `hε1`, `hr0`, `hr1` —
 derive that every tested triple of the reindexed dual falls into one of the
 four scenarios.  All the arithmetic of the paper (deriving (4), (5) ⇒ (6),
-(9), `x ≥ d`, `g_{d-2} ≤ d(d-1)`) is machine-checked here. -/
+(9), `x ≥ d`, `g_{d-2} ≤ d(d-1)`) is machine-checked here.
+
+The abstract predicate `Gor B E` reads "`B` is the Hilbert function of a
+standard graded Artinian Gorenstein quotient of `R` of socle degree `E`"
+(the paper's `B = R/Ann(H)`).  `hr1` produces such a `B` (or `B = 0`, the
+paper's `H = 0` case) together with equation (8); `hGor` records the
+elementary facts that any such Hilbert function is supported on `[0, ∞)`
+and bounded by that of `R`; and **`hStanley` — Stanley's theorem (Lemma 1),
+the sole major imported structural theorem — enters as its own separately
+named hypothesis** rather than being packaged into `hr1`. -/
 theorem deep_dispatch
     (e : ℤ) (g h p q r ε : ℤ → ℤ)
+    (Gor : (ℤ → ℤ) → ℤ → Prop)
     (hquot : ∀ t, h t ≤ Nz t)
     (hrev : ∀ t, g t = h (e - t))
     (hp0 : ∀ b, 0 ≤ p b) (hq0 : ∀ b, 0 ≤ q b)
@@ -336,10 +658,13 @@ theorem deep_dispatch
       ∑ b ∈ Finset.Icc (0 : ℤ) (d - 1), p b = 0)
     (hr1 : ∀ d, 2 ≤ d → d ≤ e → r d = 1 → p d = 0 →
       g d - 2 * g (d - 1) + g (d - 2) = 1 →
-      ∃ (a : ℤ) (B : ℤ → ℤ), 0 ≤ a ∧ a < d ∧ (∀ t : ℤ, t < 0 → B t = 0) ∧
-        (∀ t, 0 ≤ B t) ∧ (∀ t, B t ≤ Nz t) ∧
-        (∀ i j : ℤ, 0 ≤ j → j ≤ i → 2 * i ≤ e - a → B j ≤ B i) ∧
-        (∀ t, d - 2 ≤ t → t ≤ d → g t = 2 * Nz t - Nz (t - a) + B (t - a))) :
+      ∃ (a : ℤ) (B : ℤ → ℤ), 0 ≤ a ∧ a < d ∧
+        ((∀ t, B t = 0) ∨ Gor B (e - a)) ∧
+        (∀ t, d - 2 ≤ t → t ≤ d → g t = 2 * Nz t - Nz (t - a) + B (t - a)))
+    (hGor : ∀ B E, Gor B E →
+      (∀ t : ℤ, t < 0 → B t = 0) ∧ (∀ t, 0 ≤ B t) ∧ (∀ t, B t ≤ Nz t))
+    (hStanley : ∀ B E, Gor B E →
+      ∀ i j : ℤ, 0 ≤ j → j ≤ i → 2 * i ≤ E → B j ≤ B i) :
     ∀ d, 2 ≤ d → d ≤ e → GoodTriple d (g (d - 2)) (g (d - 1)) (g d) := by
   intro d hd hde
   obtain ⟨hrc, hεc⟩ := hrε d hd hde
@@ -422,8 +747,19 @@ theorem deep_dispatch
         have hpd0 : p d = 0 := le_antisymm (by linarith) (hp0 d)
         have hΔeq : g d - 2 * g (d - 1) + g (d - 2) = 1 :=
           le_antisymm (by linarith) hone
-        obtain ⟨a, B, ha0, had, hBneg, hB0, hBN, hStan, h8⟩ :=
-          hr1 d hd hde hr' hpd0 hΔeq
+        obtain ⟨a, B, ha0, had, hBcase, h8⟩ := hr1 d hd hde hr' hpd0 hΔeq
+        -- in the `H = 0` case `B = 0` and every needed fact is trivial;
+        -- otherwise they come from `hGor` and from Stanley's theorem
+        obtain ⟨hBneg, hB0, hBN, hStan⟩ :
+            (∀ t : ℤ, t < 0 → B t = 0) ∧ (∀ t, 0 ≤ B t) ∧
+            (∀ t, B t ≤ Nz t) ∧
+            (∀ i j : ℤ, 0 ≤ j → j ≤ i → 2 * i ≤ e - a → B j ≤ B i) := by
+          rcases hBcase with hB | hGorB
+          · exact ⟨fun t _ => hB t, fun t => le_of_eq (hB t).symm,
+              fun t => by rw [hB t]; exact Nz_nonneg t,
+              fun i j _ _ _ => le_of_eq ((hB j).trans (hB i).symm)⟩
+          · obtain ⟨h₁, h₂, h₃⟩ := hGor B (e - a) hGorB
+            exact ⟨h₁, h₂, h₃, hStanley B (e - a) hGorB⟩
         have h8a := h8 (d - 2) (by omega) (by omega)
         have h8b := h8 (d - 1) (by omega) (by omega)
         -- inequality (9): 2d ≤ e + 2, via N_{d-1} ≤ g_{d-1} ≤ N_{e-d+1}
@@ -509,10 +845,17 @@ theorem theorem1 (e : ℤ) (h g : ℤ → ℤ)
 standard graded Artinian level algebra of embedding dimension three, socle
 degree `e`, and type two — derived from the primitive numerical shadows of
 the paper's commutative algebra (see the header of this file for the exact
-list of assumed structural facts `hrev, hquot, hres, hrε, h3, hε1, hr0, hr1`
-and their sources in the paper). -/
+list of assumed structural facts `hrev, hquot, hres, hrε, h3, hε1, hr0, hr1,
+hGor` and their sources in the paper).
+
+Stanley's theorem (Lemma 1 of the paper, Zanello's characteristic-free
+version) is the sole major imported structural theorem; it enters as the
+separately named hypothesis `hStanley`, quantified over the abstract
+Gorenstein-Hilbert-function predicate `Gor`, rather than being packaged
+into the case-analysis hypothesis `hr1`. -/
 theorem theorem1_full
     (e : ℤ) (h g p q r ε : ℤ → ℤ)
+    (Gor : (ℤ → ℤ) → ℤ → Prop)
     (hnn : ∀ t, 0 ≤ h t)
     (hquot : ∀ t, h t ≤ Nz t)
     (hrev : ∀ t, g t = h (e - t))
@@ -531,29 +874,35 @@ theorem theorem1_full
       ∑ b ∈ Finset.Icc (0 : ℤ) (d - 1), p b = 0)
     (hr1 : ∀ d, 2 ≤ d → d ≤ e → r d = 1 → p d = 0 →
       g d - 2 * g (d - 1) + g (d - 2) = 1 →
-      ∃ (a : ℤ) (B : ℤ → ℤ), 0 ≤ a ∧ a < d ∧ (∀ t : ℤ, t < 0 → B t = 0) ∧
-        (∀ t, 0 ≤ B t) ∧ (∀ t, B t ≤ Nz t) ∧
-        (∀ i j : ℤ, 0 ≤ j → j ≤ i → 2 * i ≤ e - a → B j ≤ B i) ∧
-        (∀ t, d - 2 ≤ t → t ≤ d → g t = 2 * Nz t - Nz (t - a) + B (t - a))) :
+      ∃ (a : ℤ) (B : ℤ → ℤ), 0 ≤ a ∧ a < d ∧
+        ((∀ t, B t = 0) ∨ Gor B (e - a)) ∧
+        (∀ t, d - 2 ≤ t → t ≤ d → g t = 2 * Nz t - Nz (t - a) + B (t - a)))
+    (hGor : ∀ B E, Gor B E →
+      (∀ t : ℤ, t < 0 → B t = 0) ∧ (∀ t, 0 ≤ B t) ∧ (∀ t, B t ≤ Nz t))
+    (hStanley : ∀ B E, Gor B E →
+      ∀ i j : ℤ, 0 ≤ j → j ≤ i → 2 * i ≤ E → B j ≤ B i) :
     ∀ i : ℤ, 1 ≤ i → i ≤ e - 1 → h (i - 1) * h (i + 1) ≤ h i ^ 2 :=
   theorem1 e h g hnn hrev
-    (deep_dispatch e g h p q r ε hquot hrev hp0 hq0 hres hrε h3 hε1 hr0 hr1)
+    (deep_dispatch e g h p q r ε Gor hquot hrev hp0 hq0 hres hrε h3 hε1 hr0
+      hr1 hGor hStanley)
 
-/-! ## Non-vacuity: a concrete instance satisfying every hypothesis
+/-! ## Numerical consistency witness
 
 A theorem from hypotheses is only meaningful if the hypotheses are mutually
-consistent.  We certify this with a genuine example: the standard graded
-Artinian level algebra `A = R / Ann(X², Y² + XZ)` of embedding dimension 3,
-socle degree `e = 2`, type two, with Hilbert function `h = (1, 3, 2)`.
-Its Hilbert numerator is `(1-t)³(1+3t+2t²) = 1 - 4t² + 2t³ + 3t⁴ - 2t⁵`,
-giving the minimal resolution `0 → R(-5)² → R(-3)²⊕R(-4)³ → R(-2)⁴ → R → A`;
-dualizing (paper (1), `s = 5`) yields `F₁ = R(-1)³ ⊕ R(-2)²` (so
-`p₁ = 3, p₂ = 2`) and `F₂ = R(-3)⁴` (so `q₃ = 4`), with rank data
-`r₂ = 2`, `ε₂ = 0`.  Below, every hypothesis of `theorem1_full` is verified
-for this data — so the hypothesis set is consistent and the theorem has
-genuine content. -/
+consistent.  This section is a **numerical consistency witness**: it
+verifies, inside Lean, that the eleven hypotheses of `theorem1_full` are
+jointly satisfiable by concrete numerical data.  (The algebra that this
+data is computed from — `A = R / Ann(X², Y² + XZ)`, a standard graded
+Artinian level algebra of embedding dimension 3, socle degree `e = 2` and
+type two, with Hilbert function `h = (1, 3, 2)`, Hilbert numerator
+`(1-t)³(1+3t+2t²) = 1 - 4t² + 2t³ + 3t⁴ - 2t⁵`, minimal resolution
+`0 → R(-5)² → R(-3)²⊕R(-4)³ → R(-2)⁴ → R → A`, and dual resolution data
+`F₁ = R(-1)³ ⊕ R(-2)²`, `F₂ = R(-3)⁴`, `s = 5`, `r₂ = 2`, `ε₂ = 0` — is
+*not* itself constructed in Lean; only its numerical shadow is checked.
+What the witness proves formally is exactly consistency of the hypothesis
+set, no more.) -/
 
-section Nonvacuity
+section NumericalConsistencyWitness
 
 /-- Hilbert function `h = (1, 3, 2)` of `A = R/Ann(X², Y² + XZ)`. -/
 def hEx : ℤ → ℤ := fun i =>
@@ -642,13 +991,18 @@ lemma h3Ex : ∀ d : ℤ, 2 ≤ d → d ≤ 2 →
   rw [hq, hp]
   norm_num
 
-/-- **Non-vacuity certificate**: all hypotheses of `theorem1_full` are
-satisfied by the concrete data of `A = R/Ann(X², Y² + XZ)`, and the theorem
-delivers log-concavity of its Hilbert function `(1, 3, 2)`. -/
-theorem nonvacuity :
+/-- **Numerical consistency witness**: all hypotheses of `theorem1_full`
+are satisfied by the numerical data computed from
+`A = R/Ann(X², Y² + XZ)`, and the theorem delivers log-concavity of its
+Hilbert function `(1, 3, 2)`.  Since this instance never enters the
+`r_d = 1` failure branch, the Gorenstein predicate can be instantiated
+by `False` and Stanley's theorem is not consumed. -/
+theorem consistency_witness :
     ∀ i : ℤ, 1 ≤ i → i ≤ 2 - 1 → hEx (i - 1) * hEx (i + 1) ≤ hEx i ^ 2 := by
   refine theorem1_full 2 hEx gEx pEx qEx (fun _ => 2) (fun _ => 0)
+    (fun _ _ => False)
     ?_ ?_ (fun _ => rfl) ?_ ?_ hresEx ?_ h3Ex ?_ ?_ ?_
+    (fun _ _ hcontra => hcontra.elim) (fun _ _ hcontra => hcontra.elim)
   · intro t; simp only [hEx]; split_ifs <;> norm_num
   · intro t
     by_cases h0 : t = 0
@@ -667,11 +1021,12 @@ theorem nonvacuity :
   · intro d _ _ hcontra; norm_num at hcontra
 
 /-- The concrete inequality delivered: `h₀ h₂ = 2 ≤ 9 = h₁²`. -/
-example : hEx 0 * hEx 2 ≤ hEx 1 ^ 2 := nonvacuity 1 (by norm_num) (by norm_num)
+example : hEx 0 * hEx 2 ≤ hEx 1 ^ 2 :=
+  consistency_witness 1 (by norm_num) (by norm_num)
 
 example : hEx 0 = 1 ∧ hEx 1 = 3 ∧ hEx 2 = 2 := by decide
 
-end Nonvacuity
+end NumericalConsistencyWitness
 
 /-! ## Axiom audit
 
@@ -679,11 +1034,17 @@ Only Lean's standard foundational axioms (`propext`, `Classical.choice`,
 `Quot.sound`) — no `sorry`, no extra axioms. -/
 
 #print axioms theorem1_full
-#print axioms nonvacuity
+#print axioms consistency_witness
 #print axioms deep_dispatch
 #print axioms theorem1
 #print axioms GoodTriple.log_concave
 #print axioms shiftSum_second_diff
 #print axioms binomial_window_log_concave
+#print axioms proper_subfamily_linearIndependent
+#print axioms rank_estimate_graded
+#print axioms primitive_line_saturated
+#print axioms primitive_line_saturated_fraction
+#print axioms line_factorization
+#print axioms cyclic_submodule_simple_socle
 
 end LogConcavity

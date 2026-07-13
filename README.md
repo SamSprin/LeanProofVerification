@@ -39,6 +39,17 @@ verified:
 | Full scenario case analysis | `GoodTriple.log_concave`, `deep_dispatch` |
 | Reversal transfer `g → h` | `theorem1`, `theorem1_full` |
 
+In addition, the **structural layer** machine-checks the abstract algebra
+behind the imported hypotheses, in the exact form the paper uses it:
+
+| Paper step | Lean theorem |
+|---|---|
+| (2): 1-dim kernel spanned by a full-support vector ⇒ every proper subset of columns independent | `proper_subfamily_linearIndependent` |
+| (3): rank inequality `Q_d − ε_d ≤ P_{<d} − r_d` from the graded zero pattern of a minimal matrix | `rank_estimate`, `rank_estimate_graded` |
+| UFD lemma `(Kv) ∩ R² = Rv` for a primitive vector (Euclid's-lemma step) | `primitive_line_saturated`, `primitive_line_saturated_fraction` |
+| Passage from the low-shift image to `vJ`; truncated-kernel identity (7), `cv ∈ (vJ) ⟺ c ∈ J` | `line_factorization` |
+| Nonzero cyclic submodule of a finite-length module with simple socle ⇒ Artinian quotient with simple socle | `cyclic_submodule_simple_socle` |
+
 ## What is assumed (the trust base), and exactly why
 
 Mathlib currently has **no graded Matlis duality, no minimal graded free
@@ -53,22 +64,32 @@ annotated with its source in the paper:
 - `hrε`, `h3` — the rank data `r_d ∈ {0,1,2}`, `ε_d ∈ {0,1}` and estimate (3);
 - `hε1` — `ε_d = 1` ⇒ `h_t = N_t` below degree `s−d` (dual degree correspondence);
 - `hr0` — `r_d = 0` ⇒ no relations of shift `< d` (`P_{<d} = 0`);
-- `hr1` — in the putative-failure case, equation (8) with the Gorenstein
-  Hilbert function `B` and Stanley's monotonicity (Lemma 1) — packaging the
-  UFD/cyclic-submodule argument of pp. 3–4.
+- `hr1` — in the putative-failure case, equation (8) with `B` either zero
+  (the paper's `H = 0` case) or a Gorenstein Hilbert function `Gor B (e−a)` —
+  the UFD/cyclic-submodule argument of pp. 3–4 (whose abstract algebraic
+  content is machine-checked in the structural layer);
+- `hGor` — a Gorenstein Hilbert function is supported on `[0, ∞)` and
+  bounded by the Hilbert function of `R`;
+- `hStanley` — **Stanley's theorem (Lemma 1, Zanello's characteristic-free
+  version), the sole major imported structural theorem**, stated as its own
+  named hypothesis over the abstract predicate `Gor` rather than packaged
+  into `hr1`.
 
 The formal result: **given these structural inputs, log-concavity follows,
 with the entire quantitative argument of the paper kernel-checked.**
 
-## Non-vacuity certificate
+## Numerical consistency witness
 
 Assumed hypotheses could in principle be mutually contradictory, making the
-theorem vacuous. The `Nonvacuity` section rules this out: for the genuine
-level algebra `A = R/Ann(X², Y²+XZ)` — Hilbert function `(1,3,2)`, socle
-degree 2, type two, dual resolution `F₁ = R(−1)³⊕R(−2)²`, `F₂ = R(−3)⁴`,
-`s = 5`, rank data `r₂ = 2, ε₂ = 0` — **every hypothesis of `theorem1_full`
-is machine-verified** (`nonvacuity`), and the theorem delivers the concrete
-inequality `h₀h₂ = 2 ≤ 9 = h₁²`.
+theorem vacuous. The `NumericalConsistencyWitness` section rules this out:
+for the numerical data computed from the level algebra
+`A = R/Ann(X², Y²+XZ)` — Hilbert function `(1,3,2)`, socle degree 2, type
+two, dual resolution `F₁ = R(−1)³⊕R(−2)²`, `F₂ = R(−3)⁴`, `s = 5`, rank
+data `r₂ = 2, ε₂ = 0` — **every hypothesis of `theorem1_full` is
+machine-verified** (`consistency_witness`), and the theorem delivers the
+concrete inequality `h₀h₂ = 2 ≤ 9 = h₁²`. (The algebra itself is not
+constructed in Lean; the witness certifies exactly that the hypothesis set
+is jointly satisfiable, no more.)
 
 ## Reproducing
 
@@ -80,3 +101,11 @@ lake build   # expect: Build completed successfully + axiom audit lines
 
 Setup: elan 4.2.3 (local), Lean `v4.31.0`, Mathlib `v4.31.0` with prebuilt
 cache (`lake exe cache get`).
+
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) builds the project
+with `lake build` from a clean checkout on every push and pull request,
+records the full `#print axioms` audit in the job summary and as an
+artifact, and **fails the build** if any audited theorem depends on
+anything beyond Lean's three standard foundational axioms.

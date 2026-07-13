@@ -10,3 +10,6 @@
 *.olean
 *.ilean
 .DS_Store
+
+# local build logs
+build.log
