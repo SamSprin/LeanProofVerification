@@ -890,7 +890,7 @@ theorem theorem1_full
 
 A theorem from hypotheses is only meaningful if the hypotheses are mutually
 consistent.  This section is a **numerical consistency witness**: it
-verifies, inside Lean, that the eleven hypotheses of `theorem1_full` are
+verifies, inside Lean, that the thirteen hypotheses of `theorem1_full` are
 jointly satisfiable by concrete numerical data.  (The algebra that this
 data is computed from — `A = R / Ann(X², Y² + XZ)`, a standard graded
 Artinian level algebra of embedding dimension 3, socle degree `e = 2` and
