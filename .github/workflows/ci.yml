@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: lake build + axiom audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (clean)
+        uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Get Mathlib binary cache
+        run: lake exe cache get
+
+      - name: Build from clean checkout
+        run: |
+          set -o pipefail
+          lake build | tee build.log
+
+      - name: Record axiom audit
+        run: |
+          {
+            echo "## Axiom audit"
+            echo ""
+            echo '```'
+            grep "depends on axioms" build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify axiom audit is clean
+        run: |
+          # every audited theorem must be present and must depend on nothing
+          # beyond Lean's three standard foundational axioms
+          count=$(grep -c "depends on axioms" build.log)
+          echo "audited declarations: $count"
+          test "$count" -ge 13
+          if grep "depends on axioms" build.log \
+              | grep -v "\[propext, Classical.choice, Quot.sound\]"; then
+            echo "::error::unexpected axioms detected"
+            exit 1
+          fi
+
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        with:
+          name: axiom-audit
+          path: build.log
